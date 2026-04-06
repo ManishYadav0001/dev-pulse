@@ -66,6 +66,8 @@ const buildAnalytics = ({ commitEvents, pullRequests, issues }) => {
       repo: item.repo,
       message: item.message,
       date: item.date,
+      stats: item.stats || { additions: 0, deletions: 0, total: 0, files: 0 },
+      previousComparison: item.previousComparison
     })),
     ...pullRequests.slice(0, 6).map((item) => ({
       type: item.merged_at ? "merge" : "pr",
@@ -132,6 +134,8 @@ const buildRepoInsights = ({ repo, commits, pullRequests, issues }) => {
       repo: item.repo,
       message: item.message,
       date: item.date,
+      stats: item.stats || { additions: 0, deletions: 0, total: 0, files: 0 },
+      previousComparison: item.previousComparison
     })),
     ...pullRequests.slice(0, 4).map((item) => ({
       type: item.merged_at ? "merge" : "pr",
@@ -320,12 +324,87 @@ const fetchGitHubAnalytics = async ({ accessToken, githubUsername }) => {
       (item) => item?.sha
     );
 
-    const commits = uniqueCommits.map((item) => ({
-      sha: item.sha,
-      repo: repoName,
-      message: item.commit?.message || "Commit",
-      date: item.commit?.author?.date || item.commit?.committer?.date || new Date().toISOString(),
-    }));
+    // Fetch detailed commit stats for lines added/removed
+    const commitsWithStats = await Promise.all(
+      uniqueCommits.slice(0, 50).map(async (commit, index) => {
+        try {
+          const commitDetail = await githubClient.get(
+            `/repos/${normalizedUsername}/${repoName}/commits/${commit.sha}`
+          );
+          
+          const stats = commitDetail.data?.stats || {};
+          const additions = stats.additions || 0;
+          const deletions = stats.deletions || 0;
+          const total = additions + deletions;
+          
+          // Calculate comparison with previous commit
+          let previousComparison = null;
+          if (index > 0 && uniqueCommits[index - 1]) {
+            const previousCommitSha = uniqueCommits[index - 1].sha;
+            try {
+              const compareResponse = await githubClient.get(
+                `/repos/${normalizedUsername}/${repoName}/compare/${previousCommitSha}...${commit.sha}`
+              );
+              
+              const compareStats = compareResponse.data?.files?.reduce((acc, file) => {
+                acc.additions += file.additions || 0;
+                acc.deletions += file.deletions || 0;
+                acc.changes += file.changes || 0;
+                return acc;
+              }, { additions: 0, deletions: 0, changes: 0 });
+              
+              previousComparison = {
+                additions: compareStats.additions,
+                deletions: compareStats.deletions,
+                total: compareStats.additions + compareStats.deletions,
+                files: compareResponse.data?.files?.length || 0,
+                aheadBy: compareResponse.data?.ahead_by || 0,
+                behindBy: compareResponse.data?.behind_by || 0
+              };
+            } catch (compareError) {
+              // Fallback if comparison fails
+              previousComparison = {
+                additions: 0,
+                deletions: 0,
+                total: 0,
+                files: 0,
+                aheadBy: 0,
+                behindBy: 0
+              };
+            }
+          }
+          
+          return {
+            sha: commit.sha,
+            repo: repoName,
+            message: commit.commit?.message || "Commit",
+            date: commit.commit?.author?.date || commit.commit?.committer?.date || new Date().toISOString(),
+            stats: {
+              additions,
+              deletions,
+              total,
+              files: commitDetail.data?.files?.length || 0
+            },
+            previousComparison
+          };
+        } catch (error) {
+          // Fallback if detailed fetch fails
+          return {
+            sha: commit.sha,
+            repo: repoName,
+            message: commit.commit?.message || "Commit",
+            date: commit.commit?.author?.date || commit.commit?.committer?.date || new Date().toISOString(),
+            stats: {
+              additions: 0,
+              deletions: 0,
+              total: 0,
+              files: 0
+            },
+            previousComparison: null
+          };
+        }
+      })
+    );
 
     const pullRequests = pullsAll
       .filter((pr) => pr?.user?.login?.toLowerCase() === normalizedUsername)
@@ -348,11 +427,11 @@ const fetchGitHubAnalytics = async ({ accessToken, githubUsername }) => {
       }));
 
     return {
-      commits,
+      commits: commitsWithStats,
       pullRequests,
       issues,
       repository: includeRepoInsights
-        ? buildRepoInsights({ repo, commits, pullRequests, issues })
+        ? buildRepoInsights({ repo, commits: commitsWithStats, pullRequests, issues })
         : null,
     };
   });
