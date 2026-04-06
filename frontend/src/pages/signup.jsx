@@ -1,9 +1,50 @@
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useState } from "react"
 
 function Signup() {
-
   const [role, setRole] = useState("developer")
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
+
+  const handleSignup = async (e) => {
+    e.preventDefault()
+    setError("")
+    setSuccess("")
+
+    if (!name || !email || !password) {
+      setError("All fields are required.")
+      return
+    }
+
+    try {
+      setLoading(true)
+      const response = await fetch("http://localhost:5000/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name, email, password, role }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        setError(result.message || "Signup failed.")
+        return
+      }
+
+      setSuccess("Signup successful. Please login.")
+      setTimeout(() => navigate("/login"), 700)
+    } catch (_error) {
+      setError("Unable to connect to server.")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
@@ -47,31 +88,42 @@ function Signup() {
         </div>
 
         {/* Form */}
-        <form className="flex flex-col gap-4">
+        <form onSubmit={handleSignup} className="flex flex-col gap-4">
 
           <input
             type="text"
             placeholder="Full Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             className="bg-black border border-gray-700 px-4 py-3 rounded-lg focus:outline-none focus:border-blue-500"
           />
 
           <input
             type="email"
             placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="bg-black border border-gray-700 px-4 py-3 rounded-lg focus:outline-none focus:border-blue-500"
           />
 
           <input
             type="password"
             placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="bg-black border border-gray-700 px-4 py-3 rounded-lg focus:outline-none focus:border-blue-500"
           />
 
-          {/* Hidden role (for backend later) */}
-          <input type="hidden" value={role} />
+          <input type="hidden" value={role} readOnly />
 
-          <button className="bg-white text-black py-3 rounded-full font-medium mt-2">
-            Sign Up as {role}
+          {error ? <p className="text-red-400 text-sm">{error}</p> : null}
+          {success ? <p className="text-green-400 text-sm">{success}</p> : null}
+
+          <button
+            disabled={loading}
+            className="bg-white text-black py-3 rounded-full font-medium mt-2 disabled:opacity-60"
+          >
+            {loading ? "Signing up..." : `Sign Up as ${role}`}
           </button>
 
         </form>
