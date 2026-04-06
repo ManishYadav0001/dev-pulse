@@ -1,0 +1,391 @@
+const axios = require("axios");
+
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const analyticsCache = new Map();
+
+const isGithubForbidden = (error) =>
+  error?.response?.status === 403 || error?.response?.status === 429;
+
+const formatDateKey = (value) => new Date(value).toISOString().slice(0, 10);
+
+const toArray = (value) => (Array.isArray(value) ? value : []);
+
+const sortByDate = (items) => items.sort((a, b) => new Date(a.date) - new Date(b.date));
+const dedupeByKey = (items, keySelector) => {
+  const seen = new Set();
+  const output = [];
+  for (const item of items) {
+    const key = keySelector(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    output.push(item);
+  }
+  return output;
+};
+
+const buildAnalytics = ({ commitEvents, pullRequests, issues }) => {
+  const commitMap = new Map();
+  const prMap = new Map();
+
+  for (const commit of commitEvents) {
+    const date = formatDateKey(commit.date);
+    commitMap.set(date, (commitMap.get(date) || 0) + 1);
+  }
+
+  for (const pr of pullRequests) {
+    const openedDate = formatDateKey(pr.created_at);
+    const dateData = prMap.get(openedDate) || { opened: 0, merged: 0 };
+    dateData.opened += 1;
+    if (pr.merged_at) {
+      dateData.merged += 1;
+    }
+    prMap.set(openedDate, dateData);
+  }
+
+  const commitsOverTime = sortByDate(
+    [...commitMap.entries()].map(([date, count]) => ({ date, count }))
+  );
+  const prActivity = sortByDate(
+    [...prMap.entries()].map(([date, values]) => ({
+      date,
+      opened: values.opened,
+      merged: values.merged,
+    }))
+  );
+
+  const commits = commitEvents.length;
+  const pullRequestsCount = pullRequests.length;
+  const issuesResolved = issues.filter((issue) => Boolean(issue.closed_at)).length;
+  const productivityScore = Number(
+    (commits * 0.4 + pullRequestsCount * 0.4 + issuesResolved * 0.2).toFixed(2)
+  );
+
+  const recentActivity = [
+    ...commitEvents.slice(0, 6).map((item) => ({
+      type: "commit",
+      repo: item.repo,
+      message: item.message,
+      date: item.date,
+    })),
+    ...pullRequests.slice(0, 6).map((item) => ({
+      type: item.merged_at ? "merge" : "pr",
+      repo: item.repo,
+      message: item.title,
+      date: item.merged_at || item.created_at,
+    })),
+    ...issues.slice(0, 6).map((item) => ({
+      type: "issue",
+      repo: item.repo,
+      message: item.title,
+      date: item.closed_at || item.created_at,
+    })),
+  ]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 10);
+
+  return {
+    stats: {
+      commits,
+      pullRequests: pullRequestsCount,
+      issuesResolved,
+      productivityScore,
+    },
+    charts: {
+      commitsOverTime,
+      prActivity,
+    },
+    recentActivity,
+  };
+};
+
+const buildRepoInsights = ({ repo, commits, pullRequests, issues }) => {
+  const commitsMap = new Map();
+  const prMap = new Map();
+
+  for (const commit of commits) {
+    const date = formatDateKey(commit.date);
+    commitsMap.set(date, (commitsMap.get(date) || 0) + 1);
+  }
+
+  for (const pr of pullRequests) {
+    const date = formatDateKey(pr.created_at);
+    const current = prMap.get(date) || { opened: 0, merged: 0 };
+    current.opened += 1;
+    if (pr.merged_at) current.merged += 1;
+    prMap.set(date, current);
+  }
+
+  const commitsOverTime = sortByDate(
+    [...commitsMap.entries()].map(([date, count]) => ({ date, count }))
+  );
+  const prActivity = sortByDate(
+    [...prMap.entries()].map(([date, values]) => ({
+      date,
+      opened: values.opened,
+      merged: values.merged,
+    }))
+  );
+
+  const recentActivity = [
+    ...commits.slice(0, 4).map((item) => ({
+      type: "commit",
+      repo: item.repo,
+      message: item.message,
+      date: item.date,
+    })),
+    ...pullRequests.slice(0, 4).map((item) => ({
+      type: item.merged_at ? "merge" : "pr",
+      repo: item.repo,
+      message: item.title,
+      date: item.merged_at || item.created_at,
+    })),
+    ...issues.slice(0, 4).map((item) => ({
+      type: "issue",
+      repo: item.repo,
+      message: item.title,
+      date: item.closed_at || item.created_at,
+    })),
+  ]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 6);
+
+  return {
+    name: repo.name,
+    stars: repo.stargazers_count || 0,
+    forks: repo.forks_count || 0,
+    language: repo.language || "",
+    commits: commits.length,
+    pullRequests: pullRequests.length,
+    issuesResolved: issues.filter((item) => Boolean(item.closed_at)).length,
+    lastUpdated: repo.updated_at,
+    commitsOverTime,
+    prActivity,
+    recentActivity,
+  };
+};
+
+const getCached = (cacheKey) => {
+  const cached = analyticsCache.get(cacheKey);
+  if (!cached) return null;
+  if (Date.now() - cached.createdAt > CACHE_TTL_MS) {
+    analyticsCache.delete(cacheKey);
+    return null;
+  }
+  return cached.value;
+};
+
+const setCached = (cacheKey, value) => {
+  analyticsCache.set(cacheKey, {
+    createdAt: Date.now(),
+    value,
+  });
+};
+
+const createGithubClient = (accessToken) =>
+  axios.create({
+    baseURL: "https://api.github.com",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+const fetchPaginated = async ({ githubClient, endpoint, params = {}, maxPages = 5 }) => {
+  const all = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const response = await githubClient.get(endpoint, {
+      params: { ...params, page },
+    });
+    const items = toArray(response.data);
+    all.push(...items);
+    if (items.length < (params.per_page || 100)) {
+      break;
+    }
+  }
+  return all;
+};
+
+const fetchGitHubAnalytics = async ({ accessToken, githubUsername }) => {
+  if (!accessToken) {
+    return { noData: true, reason: "missing_token" };
+  }
+
+  const cacheKey = `oauth:${String(githubUsername || "unknown")}:${accessToken.slice(-8)}`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const githubClient = createGithubClient(accessToken);
+  let normalizedUsername = String(githubUsername || "").trim().toLowerCase();
+
+  try {
+    const meResp = await githubClient.get("/user");
+    if (!normalizedUsername) {
+      normalizedUsername = String(meResp.data?.login || "").toLowerCase();
+    }
+  } catch (error) {
+    if (isGithubForbidden(error)) {
+      return { noData: true, reason: "rate_limit" };
+    }
+    if (error.response?.status === 401) return { noData: true, reason: "invalid_token" };
+    throw error;
+  }
+
+  if (!normalizedUsername) {
+    return { noData: true, reason: "invalid_profile" };
+  }
+
+  let repos = [];
+  try {
+    repos = await fetchPaginated({
+      githubClient,
+      endpoint: "/user/repos",
+      params: {
+        affiliation: "owner",
+        sort: "updated",
+        per_page: 100,
+      },
+      maxPages: 3,
+    });
+  } catch (error) {
+    if (isGithubForbidden(error)) {
+      return { noData: true, reason: "rate_limit" };
+    }
+    if (error.response?.status === 401) return { noData: true, reason: "invalid_token" };
+    throw error;
+  }
+
+  if (!repos.length) {
+    return {
+      stats: { commits: 0, pullRequests: 0, issuesResolved: 0, productivityScore: 0 },
+      charts: { commitsOverTime: [], prActivity: [] },
+      recentActivity: [],
+      repositories: [],
+    };
+  }
+
+  const sortedRepos = [...repos].sort(
+    (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
+  );
+
+  // Performance knobs:
+  // - overall analytics: broader set
+  // - repo cards/modal: smaller set with per-repo breakdown
+  const OVERALL_REPOS_LIMIT = 25;
+  const REPO_INSIGHTS_LIMIT = 12;
+
+  const overallRepos = sortedRepos.slice(0, OVERALL_REPOS_LIMIT);
+  const repoInsightsSet = new Set(
+    sortedRepos.slice(0, REPO_INSIGHTS_LIMIT).map((r) => r.name)
+  );
+
+  const perRepoRequests = overallRepos.map(async (repo) => {
+    const repoName = repo.name;
+    const includeRepoInsights = repoInsightsSet.has(repoName);
+
+    const commitsPages = includeRepoInsights ? 3 : 2;
+    const pullsPages = includeRepoInsights ? 3 : 2;
+    const issuesPages = includeRepoInsights ? 3 : 2;
+
+    const [authorCommits, committerCommits, pullsAll, issuesAll] = await Promise.all([
+      fetchPaginated({
+        githubClient,
+        endpoint: `/repos/${normalizedUsername}/${repoName}/commits`,
+        params: { author: normalizedUsername, per_page: 100 },
+        maxPages: commitsPages,
+      }),
+      fetchPaginated({
+        githubClient,
+        endpoint: `/repos/${normalizedUsername}/${repoName}/commits`,
+        params: { committer: normalizedUsername, per_page: 100 },
+        maxPages: commitsPages,
+      }),
+      fetchPaginated({
+        githubClient,
+        endpoint: `/repos/${normalizedUsername}/${repoName}/pulls`,
+        params: { state: "all", per_page: 100 },
+        maxPages: pullsPages,
+      }),
+      fetchPaginated({
+        githubClient,
+        endpoint: `/repos/${normalizedUsername}/${repoName}/issues`,
+        params: { state: "all", creator: normalizedUsername, per_page: 100 },
+        maxPages: issuesPages,
+      }),
+    ]);
+
+    const uniqueCommits = dedupeByKey(
+      [...authorCommits, ...committerCommits],
+      (item) => item?.sha
+    );
+
+    const commits = uniqueCommits.map((item) => ({
+      sha: item.sha,
+      repo: repoName,
+      message: item.commit?.message || "Commit",
+      date: item.commit?.author?.date || item.commit?.committer?.date || new Date().toISOString(),
+    }));
+
+    const pullRequests = pullsAll
+      .filter((pr) => pr?.user?.login?.toLowerCase() === normalizedUsername)
+      .map((pr) => ({
+        id: pr.id,
+        repo: repoName,
+        title: pr.title || "Pull request",
+        created_at: pr.created_at,
+        merged_at: pr.merged_at,
+      }));
+
+    const issues = issuesAll
+      .filter((issue) => !issue.pull_request)
+      .map((issue) => ({
+        id: issue.id,
+        repo: repoName,
+        title: issue.title || "Issue",
+        created_at: issue.created_at,
+        closed_at: issue.closed_at,
+      }));
+
+    return {
+      commits,
+      pullRequests,
+      issues,
+      repository: includeRepoInsights
+        ? buildRepoInsights({ repo, commits, pullRequests, issues })
+        : null,
+    };
+  });
+
+  const results = await Promise.allSettled(perRepoRequests);
+
+  const commitEvents = [];
+  const pullRequests = [];
+  const issues = [];
+  const repositories = [];
+  for (const result of results) {
+    if (result.status !== "fulfilled") {
+      if (isGithubForbidden(result.reason)) {
+        return { noData: true, reason: "rate_limit" };
+      }
+      continue;
+    }
+    commitEvents.push(...result.value.commits);
+    pullRequests.push(...result.value.pullRequests);
+    issues.push(...result.value.issues);
+    if (result.value.repository) repositories.push(result.value.repository);
+  }
+
+  const analytics = buildAnalytics({
+    commitEvents: dedupeByKey(commitEvents, (item) => item.sha || `${item.repo}:${item.date}:${item.message}`),
+    pullRequests: dedupeByKey(pullRequests, (item) => item.id || `${item.repo}:${item.created_at}:${item.title}`),
+    issues: dedupeByKey(issues, (item) => item.id || `${item.repo}:${item.created_at}:${item.title}`),
+  });
+  analytics.repositories = repositories.sort(
+    (a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated)
+  );
+  setCached(cacheKey, analytics);
+  return analytics;
+};
+
+module.exports = { fetchGitHubAnalytics };

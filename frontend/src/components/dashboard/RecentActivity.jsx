@@ -18,7 +18,7 @@ export default function RecentActivity({ items = [] }) {
       <div className="space-y-2">
         {items.map((item) => (
           <div
-            key={item.id}
+            key={`${item.repo}-${item.date}-${item.message}`}
             className="flex items-start justify-between gap-3 rounded-2xl px-3 py-2 hover:bg-slate-900/60"
           >
             <div className="flex items-start gap-3">
@@ -26,11 +26,15 @@ export default function RecentActivity({ items = [] }) {
                 <ActivityIcon type={item.type} />
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-200">{item.action}</p>
-                <p className="text-xs text-slate-500">{item.type.toUpperCase()}</p>
+                <p className="text-sm font-medium text-slate-200">{item.message}</p>
+                <p className="text-xs text-slate-500">
+                  {item.repo} • {item.type.toUpperCase()}
+                </p>
               </div>
             </div>
-            <span className="text-xs text-slate-500">{item.time}</span>
+            <span className="text-xs text-slate-500">
+              {new Date(item.date).toLocaleDateString()}
+            </span>
           </div>
         ))}
       </div>

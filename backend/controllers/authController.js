@@ -1,6 +1,6 @@
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { createAppToken } = require("../utils/jwt");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -82,11 +82,7 @@ const login = async (req, res) => {
       return res.status(403).json({ message: "Role mismatch. Access denied." });
     }
 
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
+    const token = createAppToken(user);
 
     return res.status(200).json({
       message: "Login successful.",
@@ -96,6 +92,8 @@ const login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        githubUsername: user.githubUsername,
+        githubAvatar: user.githubAvatar,
       },
     });
   } catch (error) {
@@ -107,8 +105,33 @@ const logout = async (_req, res) => {
   return res.status(200).json({ message: "Logout successful." });
 };
 
+const me = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select(
+      "_id name email role githubUsername githubAvatar"
+    );
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    return res.status(200).json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        githubUsername: user.githubUsername,
+        githubAvatar: user.githubAvatar,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch profile." });
+  }
+};
+
 module.exports = {
   signup,
   login,
   logout,
+  me,
 };

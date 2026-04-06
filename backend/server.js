@@ -1,13 +1,15 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
-
-const connectDB = require("./config/db");
-const authRoutes = require("./routes/authRoutes");
-const authMiddleware = require("./middleware/authMiddleware");
-const roleMiddleware = require("./middleware/roleMiddleware");
+const session = require("express-session");
 
 dotenv.config();
+
+const connectDB = require("./config/db");
+const passport = require("./config/passport");
+const authRoutes = require("./routes/authRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,44 +22,24 @@ connectDB();
 
 app.use(cors());
 app.use(express.json());
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || process.env.JWT_SECRET,
+    resave: false,
+    saveUninitialized: false,
+  })
+);
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.get("/", (_req, res) => {
   res.status(200).json({ message: "DevPulse backend is running." });
 });
 
 app.use("/api/auth", authRoutes);
-
-app.get(
-  "/api/admin/dashboard",
-  authMiddleware,
-  roleMiddleware("admin"),
-  (_req, res) => {
-    res.status(200).json({
-      message: "Admin dashboard data fetched successfully.",
-      data: {
-        totalUsers: 150,
-        activeDevelopers: 87,
-        openTickets: 12,
-      },
-    });
-  }
-);
-
-app.get(
-  "/api/developer/dashboard",
-  authMiddleware,
-  roleMiddleware("developer"),
-  (_req, res) => {
-    res.status(200).json({
-      message: "Developer dashboard data fetched successfully.",
-      data: {
-        assignedTasks: 7,
-        completedTasks: 23,
-        pendingReviews: 3,
-      },
-    });
-  }
-);
+app.use("/auth", authRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: `Route not found: ${req.originalUrl}` });

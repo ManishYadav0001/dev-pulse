@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import API_BASE_URL from "../config/api"
 
 function Login() {
@@ -9,6 +9,47 @@ function Login() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const oauthToken = params.get("oauthToken")
+    const oauthError = params.get("oauthError")
+
+    if (oauthError) {
+      setError("GitHub login failed. Please try again.")
+      return
+    }
+
+    if (!oauthToken) return
+
+    const loadProfileAndRedirect = async () => {
+      try {
+        localStorage.setItem("token", oauthToken)
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${oauthToken}`,
+          },
+        })
+        const result = await response.json()
+        if (!response.ok) {
+          setError(result.message || "OAuth login failed.")
+          localStorage.removeItem("token")
+          return
+        }
+        localStorage.setItem("user", JSON.stringify(result.user))
+        window.history.replaceState({}, "", "/login")
+        if (result.user.role === "admin") {
+          navigate("/manager")
+        } else {
+          navigate("/dashboard")
+        }
+      } catch (_err) {
+        setError("Unable to complete GitHub login.")
+      }
+    }
+
+    loadProfileAndRedirect()
+  }, [navigate])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -121,6 +162,13 @@ function Login() {
           </button>
 
         </form>
+
+        <button
+          onClick={() => (window.location.href = `${API_BASE_URL}/auth/github`)}
+          className="mt-3 w-full rounded-full border border-slate-500 bg-transparent py-3 text-white hover:bg-white/10"
+        >
+          Continue with GitHub
+        </button>
 
         {/* Footer */}
         <p className="text-gray-400 text-center mt-6">

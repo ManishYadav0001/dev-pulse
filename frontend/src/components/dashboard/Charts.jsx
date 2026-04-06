@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts";
 
-export default function Charts({ data = [] }) {
+export default function Charts({ commitsData = [], prData = [] }) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <div className="rounded-2xl border border-slate-800 bg-[#0b1220] p-5 shadow-[0_10px_30px_rgba(2,6,23,0.45)]">
@@ -21,7 +21,10 @@ export default function Charts({ data = [] }) {
 
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+            <AreaChart
+              data={commitsData}
+              margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+            >
               <defs>
                 <linearGradient id="commitsFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.45} />
@@ -30,7 +33,7 @@ export default function Charts({ data = [] }) {
               </defs>
               <CartesianGrid strokeDasharray="4 4" stroke="#1e293b" />
               <XAxis
-                dataKey="day"
+                dataKey="date"
                 tickLine={false}
                 axisLine={false}
                 tick={{ fill: "#64748b", fontSize: 12 }}
@@ -46,7 +49,7 @@ export default function Charts({ data = [] }) {
               />
               <Area
                 type="monotone"
-                dataKey="commits"
+                dataKey="count"
                 stroke="#3b82f6"
                 fill="url(#commitsFill)"
                 strokeWidth={2.5}
@@ -64,10 +67,10 @@ export default function Charts({ data = [] }) {
 
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+            <BarChart data={prData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="4 4" stroke="#1e293b" />
               <XAxis
-                dataKey="day"
+                dataKey="date"
                 tickLine={false}
                 axisLine={false}
                 tick={{ fill: "#64748b", fontSize: 12 }}
@@ -82,9 +85,8 @@ export default function Charts({ data = [] }) {
                 }}
               />
               <Legend wrapperStyle={{ color: "#94a3b8", fontSize: "12px" }} />
-              <Bar dataKey="prsOpened" name="Opened" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="prsReviewed" name="Reviewed" fill="#34d399" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="prsMerged" name="Merged" fill="#ef4444" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="opened" name="Opened" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="merged" name="Merged" fill="#ef4444" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
