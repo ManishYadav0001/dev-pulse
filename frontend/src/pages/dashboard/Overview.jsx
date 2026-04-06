@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import StatsCards from "../../components/dashboard/StatsCards.jsx";
 import Charts from "../../components/dashboard/Charts.jsx";
 import RecentActivity from "../../components/dashboard/RecentActivity.jsx";
 import Insights from "../../components/dashboard/Insights.jsx";
-import API_BASE_URL from "../../config/api";
 
 export default function Overview() {
   const { dashboard, loading, error } = useOutletContext();
-  const [aiInsights, setAiInsights] = useState([]);
-  const [aiSuggestions, setAiSuggestions] = useState([]);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState("");
+  
+  // Use AI insights from dashboard API (processed by Python)
+  const aiInsights = dashboard?.aiInsights?.insights || [];
+  const aiSuggestions = dashboard?.aiInsights?.suggestions || [];
+  const aiLoading = loading; // Use dashboard loading state
+  const aiError = ""; // No separate error state needed
 
   const statsItems = useMemo(() => {
     if (!dashboard?.stats) return [];
@@ -50,57 +51,6 @@ export default function Overview() {
       },
     ];
   }, [dashboard]);
-
-  const fetchAIInsights = async (force = false) => {
-    if (!dashboard?.stats || !dashboard?.charts || !dashboard?.recentActivity) return;
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    try {
-      setAiLoading(true);
-      setAiError("");
-      const response = await fetch(`${API_BASE_URL}/api/ai/insights`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          stats: dashboard.stats,
-          charts: dashboard.charts,
-          recentActivity: dashboard.recentActivity,
-          force,
-        }),
-      });
-      const result = await response.json();
-
-      if (!response.ok) {
-        setAiError(result.message || "Failed to generate AI insights.");
-        setAiInsights([]);
-        setAiSuggestions([]);
-        return;
-      }
-
-      setAiInsights(Array.isArray(result.insights) ? result.insights : []);
-      setAiSuggestions(Array.isArray(result.suggestions) ? result.suggestions : []);
-      if ((!result.insights || !result.insights.length) && (!result.suggestions || !result.suggestions.length)) {
-        setAiError("No insights available.");
-      }
-    } catch (_err) {
-      setAiError("AI insights are unavailable right now.");
-      setAiInsights([]);
-      setAiSuggestions([]);
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!loading && !error && !dashboard?.noData) {
-      fetchAIInsights(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, error, dashboard?.stats, dashboard?.charts, dashboard?.recentActivity, dashboard?.noData]);
 
   if (loading) {
     return (
@@ -160,10 +110,9 @@ export default function Overview() {
           suggestions={aiSuggestions}
           loading={aiLoading}
           error={aiError}
-          onRegenerate={() => fetchAIInsights(true)}
+          onRegenerate={() => window.location.reload()} // Simple refresh for now
         />
       </div>
     </>
   );
 }
-

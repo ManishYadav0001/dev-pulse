@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const { fetchGitHubAnalytics } = require("../services/githubAnalyticsService");
+const { generateAIInsights } = require("../services/aiAnalyticsService");
 
 const getDashboard = async (req, res) => {
   try {
@@ -43,10 +44,21 @@ const getDashboard = async (req, res) => {
       });
     }
 
+    // Generate AI insights using Python analytics
+    let aiInsights = { insights: [], suggestions: [] };
+    try {
+      aiInsights = await generateAIInsights(analytics.stats);
+      console.log("[DASHBOARD] AI insights generated successfully");
+    } catch (error) {
+      console.error("[DASHBOARD] Failed to generate AI insights:", error);
+      // Fallback insights already set above
+    }
+
     return res.status(200).json({
       role: "developer",
       user: currentUser,
       ...analytics,
+      aiInsights,
     });
   } catch (error) {
     console.error("Dashboard fetch error:", error.message);

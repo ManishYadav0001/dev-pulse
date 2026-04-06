@@ -175,13 +175,13 @@ const getCached = (cacheKey) => {
     analyticsCache.delete(cacheKey);
     return null;
   }
-  return cached.value;
+  return cached.data;
 };
 
-const setCached = (cacheKey, value) => {
-  analyticsCache.set(cacheKey, {
-    createdAt: Date.now(),
-    value,
+const setCached = (key, data) => {
+  analyticsCache.set(key, {
+    data,
+    timestamp: Date.now(),
   });
 };
 
@@ -467,4 +467,6 @@ const fetchGitHubAnalytics = async ({ accessToken, githubUsername }) => {
   return analytics;
 };
 
-module.exports = { fetchGitHubAnalytics };
+module.exports = {
+  fetchGitHubAnalytics,
+};
