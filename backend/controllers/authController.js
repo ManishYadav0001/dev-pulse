@@ -3,15 +3,13 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PASSWORD_REGEX =
-  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 const signup = async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
 
-    if (!name || !email || !password || !role) {
-      return res.status(400).json({ message: "All fields are required." });
+    if (!name || !email || !role) {
+      return res.status(400).json({ message: "Name, email, and role are required." });
     }
 
     const trimmedName = String(name).trim();
@@ -27,13 +25,6 @@ const signup = async (req, res) => {
       return res.status(400).json({ message: "Please enter a valid email." });
     }
 
-    if (!PASSWORD_REGEX.test(password)) {
-      return res.status(400).json({
-        message:
-          "Password must be 8+ chars and include uppercase, lowercase, number, and special character.",
-      });
-    }
-
     if (!["admin", "developer"].includes(role)) {
       return res.status(400).json({ message: "Invalid role." });
     }
@@ -43,8 +34,9 @@ const signup = async (req, res) => {
       return res.status(409).json({ message: "User already exists with this email." });
     }
 
+    const plainPassword = String(password ?? "");
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(plainPassword, salt);
 
     await User.create({
       name: trimmedName,
@@ -63,8 +55,8 @@ const login = async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
-    if (!email || !password || !role) {
-      return res.status(400).json({ message: "Email, password, and role are required." });
+    if (!email || !role) {
+      return res.status(400).json({ message: "Email and role are required." });
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
@@ -78,7 +70,10 @@ const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const plainPassword = String(password ?? "");
+    const isPasswordValid = user.password
+      ? await bcrypt.compare(plainPassword, user.password)
+      : plainPassword === "";
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
