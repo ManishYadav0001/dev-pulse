@@ -102,8 +102,12 @@ export default function RepoInsights({ repositories = [] }) {
             <button
               key={repo.name}
               onClick={() => setSelectedRepo(repo)}
-              className="rounded-2xl border border-slate-800 bg-[#0b1220] p-5 text-left shadow-[0_10px_30px_rgba(2,6,23,0.45)] hover:border-slate-600"
+              className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-[#0b1220] p-5 text-left shadow-[0_10px_30px_rgba(2,6,23,0.45)] transition hover:-translate-y-0.5 hover:border-slate-600 hover:shadow-[0_16px_40px_rgba(2,6,23,0.6)]"
             >
+              <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
+                <div className="absolute -top-24 left-1/2 h-48 w-48 -translate-x-1/2 rounded-full bg-blue-500/10 blur-3xl" />
+              </div>
+
               <div className="mb-3 flex items-center justify-between gap-2">
                 <p className="truncate text-base font-semibold text-slate-100">{repo.name}</p>
                 {repo.language ? (
@@ -113,17 +117,39 @@ export default function RepoInsights({ repositories = [] }) {
                 ) : null}
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-sm text-slate-300">
-                <p>⭐ Stars: {repo.stars}</p>
-                <p>🍴 Forks: {repo.forks}</p>
-                <p>Commits: {repo.commits}</p>
-                <p>PRs: {repo.pullRequests}</p>
-                <p className="col-span-2">Issues Resolved: {repo.issuesResolved}</p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-300">
+                  ⭐ {repo.stars}
+                </span>
+                <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-300">
+                  🍴 {repo.forks}
+                </span>
+                <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-300">
+                  Commits {repo.commits}
+                </span>
+                <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-300">
+                  PRs {repo.pullRequests}
+                </span>
+                <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-300">
+                  Issues {repo.issuesResolved}
+                </span>
               </div>
 
               <p className="mt-3 text-xs text-slate-500">
                 Updated: {new Date(repo.lastUpdated).toLocaleDateString()}
               </p>
+
+              <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-900 ring-1 ring-slate-800">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-500/70 via-indigo-500/70 to-emerald-500/60"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(8, (repo.commits + repo.pullRequests) * 2)
+                    )}%`,
+                  }}
+                />
+              </div>
             </button>
           ))}
         </div>
