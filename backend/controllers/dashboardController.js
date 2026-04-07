@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const { fetchGitHubAnalytics } = require("../services/githubAnalyticsService");
-const { generateAIInsights, generatePRInsights } = require("../services/aiAnalyticsService");
+const { generateAIInsights, generatePRInsights, generateAlertInsights } = require("../services/aiAnalyticsService");
+const alertsService = require("../services/alertsService");
 
 const getDashboard = async (req, res) => {
   try {
@@ -47,6 +48,7 @@ const getDashboard = async (req, res) => {
     // Generate AI insights using Python analytics
     let aiInsights = { insights: [], suggestions: [] };
     let prInsights = { prInsights: [], prSuggestions: [] };
+    let alertInsights = { alertsSummary: [], alertRecommendations: [] };
     
     try {
       aiInsights = await generateAIInsights(analytics.stats);
@@ -64,6 +66,28 @@ const getDashboard = async (req, res) => {
         console.error("[DASHBOARD] Failed to generate PR insights:", error);
       }
     }
+    
+    // Detect alerts for repositories
+    let alerts = [];
+    try {
+      alerts = await alertsService.detectAlertsForUser(
+        currentUser.githubUsername,
+        currentUser.accessToken
+      );
+      console.log(`[DASHBOARD] Detected alerts for ${alerts.length} repositories`);
+      
+      // Generate AI insights for alerts
+      if (alerts.length > 0) {
+        try {
+          alertInsights = await generateAlertInsights({ alerts });
+          console.log("[DASHBOARD] Alert insights generated successfully");
+        } catch (error) {
+          console.error("[DASHBOARD] Failed to generate alert insights:", error);
+        }
+      }
+    } catch (error) {
+      console.error("[DASHBOARD] Failed to detect alerts:", error);
+    }
 
     return res.status(200).json({
       role: "developer",
@@ -72,6 +96,9 @@ const getDashboard = async (req, res) => {
       aiInsights,
       prInsights: prInsights.prInsights || [],
       prSuggestions: prInsights.prSuggestions || [],
+      alerts,
+      alertsSummary: alertInsights.alertsSummary || [],
+      alertRecommendations: alertInsights.alertRecommendations || [],
     });
   } catch (error) {
     console.error("Dashboard fetch error:", error.message);

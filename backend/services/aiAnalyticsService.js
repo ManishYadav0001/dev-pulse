@@ -218,8 +218,102 @@ const generatePRInsights = async (prMetrics) => {
   }
 };
 
+/**
+ * Generate alert insights using Python analytics script
+ * @param {Object} alertsData - Alerts data from repositories
+ * @returns {Promise<Object>} - Alert insights and recommendations
+ */
+const generateAlertInsights = async (alertsData) => {
+  try {
+    // Generate cache key based on data
+    const cacheKey = JSON.stringify(alertsData);
+    const cached = insightsCache.get(cacheKey);
+    
+    // Return cached result if still valid
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+      console.log("[AI] Using cached alert insights");
+      return cached.data;
+    }
+
+    console.log("[AI] Generating new alert insights with Python");
+    
+    // Spawn Python process
+    const pythonProcess = spawn('python3', [
+      path.join(__dirname, '../ai/alert_insights.py')
+    ]);
+
+    let output = '';
+    let errorOutput = '';
+
+    // Set up stdout and stderr handlers
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    // Send data to Python via stdin
+    pythonProcess.stdin.write(JSON.stringify(alertsData));
+    pythonProcess.stdin.end();
+
+    // Wait for process completion
+    return new Promise((resolve, reject) => {
+      pythonProcess.on('close', (code) => {
+        if (code !== 0) {
+          console.error('[AI] Alert Python script failed:', errorOutput);
+          resolve({
+            alertsSummary: [],
+            alertRecommendations: []
+          });
+          return;
+        }
+
+        try {
+          // Parse Python output
+          const result = JSON.parse(output);
+          
+          // Cache the result
+          insightsCache.set(cacheKey, {
+            data: result,
+            timestamp: Date.now()
+          });
+
+          // Clean up old cache entries
+          cleanCache();
+          
+          resolve(result);
+        } catch (parseError) {
+          console.error('[AI] Failed to parse alert Python output:', parseError);
+          resolve({
+            alertsSummary: [],
+            alertRecommendations: []
+          });
+        }
+      });
+
+      pythonProcess.on('error', (error) => {
+        console.error('[AI] Alert Python process error:', error);
+        resolve({
+          alertsSummary: [],
+          alertRecommendations: []
+        });
+      });
+    });
+
+  } catch (error) {
+    console.error('[AI] Alert insights unexpected error:', error);
+    return {
+      alertsSummary: [],
+      alertRecommendations: []
+    };
+  }
+};
+
 module.exports = {
   generateAIInsights,
   generatePRInsights,
+  generateAlertInsights,
   clearInsightsCache
 };

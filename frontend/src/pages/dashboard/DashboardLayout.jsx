@@ -135,6 +135,19 @@ export default function DashboardLayout() {
               >
                 Repository Debug Information
               </NavLink>
+              <NavLink
+                to="/dashboard/smart-alerts"
+                className={({ isActive }) =>
+                  [
+                    linkBase,
+                    isActive
+                      ? "bg-slate-900 text-slate-100 ring-1 ring-slate-700"
+                      : "text-slate-400 hover:bg-slate-900/60",
+                  ].join(" ")
+                }
+              >
+                Smart Alerts
+              </NavLink>
             </nav>
             <div className="mt-auto pt-4 text-xs text-slate-500">
               Built with GitHub OAuth

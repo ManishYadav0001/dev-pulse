@@ -10,6 +10,7 @@ import Repos from "./pages/dashboard/Repos.jsx"
 import TopContributors from "./pages/dashboard/TopContributors.jsx"
 import DeployStatus from "./pages/dashboard/DeployStatus.jsx"
 import ProjectDeployStatus from "./pages/dashboard/ProjectDeployStatus.jsx"
+import SmartAlerts from "./pages/dashboard/SmartAlerts.jsx"
 import { Navigate } from "react-router-dom"
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
           <Route path="contributors" element={<TopContributors />} />
           <Route path="deploy-status" element={<DeployStatus />} />
           <Route path="project-deploy-status" element={<ProjectDeployStatus />} />
+          <Route path="smart-alerts" element={<SmartAlerts />} />
         </Route>
         <Route path="/manager" element={<ManagerDashboard />} />
         <Route path="/admin/user/:id" element={<AdminUserAnalytics />} />
