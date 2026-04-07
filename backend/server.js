@@ -10,6 +10,8 @@ const passport = require("./config/passport");
 const authRoutes = require("./routes/authRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const deployRoutes = require("./routes/deployRoutes");
+const deployDebugRoutes = require("./routes/deployDebugRoutes");
 const contributorsRoutes = require("./routes/contributorsRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 
@@ -42,6 +44,8 @@ app.use("/api/auth", authRoutes);
 app.use("/auth", authRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/deploy", deployRoutes);
+app.use("/api/deploy", deployDebugRoutes);
 app.use("/api/contributors", contributorsRoutes);
 app.use("/api/ai", aiRoutes);
 

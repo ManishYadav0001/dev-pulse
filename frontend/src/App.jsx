@@ -8,6 +8,8 @@ import DashboardLayout from "./pages/dashboard/DashboardLayout.jsx"
 import Overview from "./pages/dashboard/Overview.jsx"
 import Repos from "./pages/dashboard/Repos.jsx"
 import TopContributors from "./pages/dashboard/TopContributors.jsx"
+import DeployStatus from "./pages/dashboard/DeployStatus.jsx"
+import ProjectDeployStatus from "./pages/dashboard/ProjectDeployStatus.jsx"
 import { Navigate } from "react-router-dom"
 
 function App() {
@@ -22,6 +24,8 @@ function App() {
           <Route path="overview" element={<Overview />} />
           <Route path="repos" element={<Repos />} />
           <Route path="contributors" element={<TopContributors />} />
+          <Route path="deploy-status" element={<DeployStatus />} />
+          <Route path="project-deploy-status" element={<ProjectDeployStatus />} />
         </Route>
         <Route path="/manager" element={<ManagerDashboard />} />
         <Route path="/admin/user/:id" element={<AdminUserAnalytics />} />

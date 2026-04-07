@@ -23,6 +23,137 @@ const dedupeByKey = (items, keySelector) => {
   return output;
 };
 
+const buildPRMetrics = (pullRequests) => {
+  console.log(`[PR METRICS] Processing ${pullRequests.length} pull requests`);
+  
+  if (!pullRequests || pullRequests.length === 0) {
+    console.log('[PR METRICS] No pull requests to process');
+    return {
+      totalPRs: 0,
+      mergedPRs: 0,
+      openPRs: 0,
+      avgMergeTime: 0,
+      avgReviewTime: 0,
+      bottlenecks: [],
+      mergeTimeDistribution: null
+    };
+  }
+
+  // Log first PR for debugging
+  if (pullRequests[0]) {
+    console.log('[PR METRICS] Sample PR:', {
+      state: pullRequests[0].state,
+      merged_at: pullRequests[0].merged_at,
+      created_at: pullRequests[0].created_at,
+      updated_at: pullRequests[0].updated_at
+    });
+  }
+
+  const mergedPRs = pullRequests.filter(pr => {
+    const hasMergedAt = pr.merged_at && pr.merged_at !== null && pr.merged_at !== '';
+    if (hasMergedAt) {
+      console.log(`[PR METRICS] Found merged PR: ${pr.title || 'No title'}, merged_at: ${pr.merged_at}`);
+    }
+    return hasMergedAt;
+  });
+  
+  const openPRs = pullRequests.filter(pr => pr.state === 'open');
+  
+  console.log(`[PR METRICS] Merged PRs: ${mergedPRs.length}, Open PRs: ${openPRs.length}`);
+  
+  // Calculate merge times (in hours)
+  const mergeTimes = mergedPRs.map(pr => {
+    try {
+      const created = new Date(pr.created_at);
+      const merged = new Date(pr.merged_at);
+      
+      if (isNaN(created.getTime()) || isNaN(merged.getTime())) {
+        console.log(`[PR METRICS] Invalid dates for PR: ${pr.title}, created: ${pr.created_at}, merged: ${pr.merged_at}`);
+        return null;
+      }
+      
+      const diffHours = (merged - created) / (1000 * 60 * 60); // hours
+      console.log(`[PR METRICS] Merge time for "${pr.title}": ${diffHours.toFixed(2)} hours`);
+      return diffHours;
+    } catch (err) {
+      console.error(`[PR METRICS] Error calculating merge time: ${err.message}`);
+      return null;
+    }
+  }).filter(time => time !== null && time > 0 && time < 30 * 24); // filter out unrealistic times (>30 days)
+  
+  // Calculate review times (approximate using first update or merge time)
+  const reviewTimes = pullRequests.map(pr => {
+    try {
+      const created = new Date(pr.created_at);
+      const reviewEnd = pr.merged_at ? new Date(pr.merged_at) : new Date(pr.updated_at);
+      
+      if (isNaN(created.getTime()) || isNaN(reviewEnd.getTime())) {
+        return null;
+      }
+      
+      return (reviewEnd - created) / (1000 * 60 * 60); // hours
+    } catch (err) {
+      return null;
+    }
+  }).filter(time => time !== null && time > 0 && time < 30 * 24);
+  
+  console.log(`[PR METRICS] Valid merge times: ${mergeTimes.length}, Valid review times: ${reviewTimes.length}`);
+  
+  const avgMergeTime = mergeTimes.length > 0 
+    ? mergeTimes.reduce((sum, time) => sum + time, 0) / mergeTimes.length 
+    : 0;
+    
+  const avgReviewTime = reviewTimes.length > 0 
+    ? reviewTimes.reduce((sum, time) => sum + time, 0) / reviewTimes.length 
+    : 0;
+  
+  console.log(`[PR METRICS] Avg merge time: ${avgMergeTime.toFixed(2)}h, Avg review time: ${avgReviewTime.toFixed(2)}h`);
+  
+  // Bottleneck detection
+  const bottlenecks = [];
+  
+  if (avgMergeTime > 48) { // > 48 hours
+    bottlenecks.push({
+      type: 'slow_merge',
+      severity: avgMergeTime > 120 ? 'critical' : 'warning',
+      message: `PR merge process is slow (${avgMergeTime.toFixed(1)}h average) - possible bottleneck`,
+      suggestion: 'Consider increasing reviewer availability or automating merge processes'
+    });
+  }
+  
+  if (openPRs.length > 5) {
+    bottlenecks.push({
+      type: 'review_backlog',
+      severity: openPRs.length > 10 ? 'critical' : 'warning',
+      message: `High number of pending PRs (${openPRs.length}) - review backlog detected`,
+      suggestion: 'Assign more reviewers or implement PR triage process'
+    });
+  }
+  
+  if (avgReviewTime > avgMergeTime * 1.5 && avgReviewTime > 24) {
+    bottlenecks.push({
+      type: 'review_inefficiency',
+      severity: avgReviewTime > 72 ? 'critical' : 'warning',
+      message: `Review phase is taking longer than merge phase (${avgReviewTime.toFixed(1)}h vs ${avgMergeTime.toFixed(1)}h) - inefficiency detected`,
+      suggestion: 'Streamline review process and provide better review guidelines'
+    });
+  }
+  
+  return {
+    totalPRs: pullRequests.length,
+    mergedPRs: mergedPRs.length,
+    openPRs: openPRs.length,
+    avgMergeTime: Math.round(avgMergeTime * 10) / 10, // 1 decimal place
+    avgReviewTime: Math.round(avgReviewTime * 10) / 10,
+    bottlenecks,
+    mergeTimeDistribution: mergeTimes.length > 0 ? {
+      min: Math.min(...mergeTimes),
+      max: Math.max(...mergeTimes),
+      median: mergeTimes.sort((a, b) => a - b)[Math.floor(mergeTimes.length / 2)]
+    } : null
+  };
+};
+
 const buildAnalytics = ({ commitEvents, pullRequests, issues }) => {
   const commitMap = new Map();
   const prMap = new Map();
@@ -60,6 +191,9 @@ const buildAnalytics = ({ commitEvents, pullRequests, issues }) => {
     (commits * 0.4 + pullRequestsCount * 0.4 + issuesResolved * 0.2).toFixed(2)
   );
 
+  // Calculate PR metrics
+  const prMetrics = buildPRMetrics(pullRequests);
+
   const recentActivity = [
     ...commitEvents.slice(0, 6).map((item) => ({
       type: "commit",
@@ -96,6 +230,7 @@ const buildAnalytics = ({ commitEvents, pullRequests, issues }) => {
       commitsOverTime,
       prActivity,
     },
+    prMetrics,
     recentActivity,
   };
 };
@@ -414,6 +549,9 @@ const fetchGitHubAnalytics = async ({ accessToken, githubUsername }) => {
         title: pr.title || "Pull request",
         created_at: pr.created_at,
         merged_at: pr.merged_at,
+        state: pr.state,
+        updated_at: pr.updated_at,
+        closed_at: pr.closed_at,
       }));
 
     const issues = issuesAll

@@ -109,6 +109,32 @@ export default function DashboardLayout() {
               >
                 Top Contributors
               </NavLink>
+              <NavLink
+                to="/dashboard/deploy-status"
+                className={({ isActive }) =>
+                  [
+                    linkBase,
+                    isActive
+                      ? "bg-slate-900 text-slate-100 ring-1 ring-slate-700"
+                      : "text-slate-400 hover:bg-slate-900/60",
+                  ].join(" ")
+                }
+              >
+                Deploy Status
+              </NavLink>
+              <NavLink
+                to="/dashboard/project-deploy-status"
+                className={({ isActive }) =>
+                  [
+                    linkBase,
+                    isActive
+                      ? "bg-slate-900 text-slate-100 ring-1 ring-slate-700"
+                      : "text-slate-400 hover:bg-slate-900/60",
+                  ].join(" ")
+                }
+              >
+                Repository Debug Information
+              </NavLink>
             </nav>
             <div className="mt-auto pt-4 text-xs text-slate-500">
               Built with GitHub OAuth

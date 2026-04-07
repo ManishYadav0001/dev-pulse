@@ -1,6 +1,6 @@
 const User = require("../models/User");
 const { fetchGitHubAnalytics } = require("../services/githubAnalyticsService");
-const { generateAIInsights } = require("../services/aiAnalyticsService");
+const { generateAIInsights, generatePRInsights } = require("../services/aiAnalyticsService");
 
 const getDashboard = async (req, res) => {
   try {
@@ -46,12 +46,23 @@ const getDashboard = async (req, res) => {
 
     // Generate AI insights using Python analytics
     let aiInsights = { insights: [], suggestions: [] };
+    let prInsights = { prInsights: [], prSuggestions: [] };
+    
     try {
       aiInsights = await generateAIInsights(analytics.stats);
       console.log("[DASHBOARD] AI insights generated successfully");
     } catch (error) {
       console.error("[DASHBOARD] Failed to generate AI insights:", error);
-      // Fallback insights already set above
+    }
+    
+    // Generate PR insights if prMetrics available
+    if (analytics.prMetrics) {
+      try {
+        prInsights = await generatePRInsights(analytics.prMetrics);
+        console.log("[DASHBOARD] PR insights generated successfully");
+      } catch (error) {
+        console.error("[DASHBOARD] Failed to generate PR insights:", error);
+      }
     }
 
     return res.status(200).json({
@@ -59,6 +70,8 @@ const getDashboard = async (req, res) => {
       user: currentUser,
       ...analytics,
       aiInsights,
+      prInsights: prInsights.prInsights || [],
+      prSuggestions: prInsights.prSuggestions || [],
     });
   } catch (error) {
     console.error("Dashboard fetch error:", error.message);

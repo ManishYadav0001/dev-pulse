@@ -4,6 +4,7 @@ import StatsCards from "../../components/dashboard/StatsCards.jsx";
 import Charts from "../../components/dashboard/Charts.jsx";
 import RecentActivity from "../../components/dashboard/RecentActivity.jsx";
 import Insights from "../../components/dashboard/Insights.jsx";
+import PRInsights from "../../components/dashboard/PRInsights.jsx";
 
 export default function Overview() {
   const { dashboard, loading, error } = useOutletContext();
@@ -13,6 +14,12 @@ export default function Overview() {
   const aiSuggestions = dashboard?.aiInsights?.suggestions || [];
   const aiLoading = loading; // Use dashboard loading state
   const aiError = ""; // No separate error state needed
+
+  // PR Insights data
+  const prMetrics = dashboard?.prMetrics;
+  const prInsights = dashboard?.prInsights || [];
+  const prSuggestions = dashboard?.prSuggestions || [];
+  const prLoading = loading;
 
   const statsItems = useMemo(() => {
     if (!dashboard?.stats) return [];
@@ -101,16 +108,40 @@ export default function Overview() {
         />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <RecentActivity items={dashboard?.recentActivity || []} />
-        </div>
+      {/* PR Insights Section */}
+      <div className="mt-6">
+        <PRInsights 
+          prMetrics={prMetrics}
+          prInsights={prInsights}
+          prSuggestions={prSuggestions}
+          loading={prLoading}
+        />
+      </div>
+
+      {/* Recent Activity - Full Width */}
+      <div className="mt-6">
+        <RecentActivity items={dashboard?.recentActivity || []} />
+      </div>
+
+      {/* AI Insights and Suggestions - Side by Side */}
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Insights
+          mode="insights"
           insights={aiInsights}
+          suggestions={[]}
+          loading={aiLoading}
+          error={aiError}
+          title="AI Insights"
+          subtitle="Analysis from your activity"
+        />
+        <Insights
+          mode="suggestions"
+          insights={[]}
           suggestions={aiSuggestions}
           loading={aiLoading}
           error={aiError}
-          onRegenerate={() => window.location.reload()} // Simple refresh for now
+          title="Smart Suggestions"
+          subtitle="Recommendations to improve"
         />
       </div>
     </>
